@@ -1,1 +1,52 @@
-Hello World
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>Inventory Admin</title>
+	<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+	<div class="app">
+		<header class="app-header">
+			<h1>Inventory — Admin View</h1>
+			<div class="header-actions">
+				<input id="search" placeholder="Search items, SKU, location..." />
+				<select id="pageSize">
+					<option value="10">10 / page</option>
+					<option value="25">25 / page</option>
+					<option value="50">50 / page</option>
+				</select>
+				<button id="addRecord" class="btn">Add Record</button>
+				<button id="refresh">Refresh</button>
+			</div>
+		</header>
+
+		<main>
+			<div id="status" class="status"></div>
+			<div class="table-wrap">
+				<table id="inventoryTable" class="admin-table">
+					<thead>
+						<tr>
+							<th data-key="id">ID</th>
+							<th data-key="name">Name</th>
+							<th data-key="sku">SKU</th>
+							<th data-key="quantity">Quantity</th>
+							<th data-key="location">Location</th>
+							<th data-key="updated_at">Updated</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody></tbody>
+				</table>
+			</div>
+
+			<div class="controls">
+				<div id="pagination" class="pagination"></div>
+			</div>
+		</main>
+	</div>
+
+	<script src="/script.js"></script>
+</body>
+</html>

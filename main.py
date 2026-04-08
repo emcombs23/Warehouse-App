@@ -1,7 +1,17 @@
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from sqlmodel import Session, select
-from models import Inventory, engine
+from models import Inventory,User, engine
+import bcrypt
+from pydantic import BaseModel
+
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 app = FastAPI()
 
@@ -18,9 +28,46 @@ async def get_inventory():
 async def delete_inventory(id: int):
     with Session(engine) as session:
         statement = select(Inventory).where(Inventory.id == id)
-        result = session.exec(statement).one()
-        if result:
-            session.delete(result)
-            session.commit()
+        record = session.exec(statement).one()
+        session.delete(record)
+        session.commit()
+
+@app.post("/inventory")
+async def create_item(item: Inventory):
+    with Session(engine) as session:
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return item
+
+@app.put("/update/{id}")
+async def update_item(id: int, item: Inventory):
+    with Session(engine) as session:
+        statement = select(Inventory).where(Inventory.id == id)
+        record = session.exec(statement).one()
+        record.name = item.name
+        record.category = item.category
+        record.brand = item.brand
+        record.size = item.size
+        record.color = item.color
+        record.quantity = item.quantity
+        record.price = item.price
+        session.add(record)
+        session.commit()
+        session.refresh(record)
+        return record
+
+
+@app.post("/register")
+async def register(user: UserCreate):
+    with Session(engine) as session:
+        existing_user = session.exec(select(User).where(User.username == user.username)).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username already exists")
+        user_record = User(username=user.username, password_hash=hash_password(user.password))
+        session.add(user_record)
+        session.commit()
+        session.refresh(user_record)
+        return {"id": user_record.id, "username": user_record.username, 'password_hash': user_record.password_hash}
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

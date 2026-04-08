@@ -1,145 +1,212 @@
-(function(){
-	let items = [];
-	let filtered = [];
-	let sortKey = null;
-	let sortDir = 1;
-	let page = 1;
-	let pageSize = 10;
+const statusEl = document.getElementById("status");
+const rowCountEl = document.getElementById("row-count");
+const tbody = document.getElementById("inventory-body");
+const searchInput = document.getElementById("search");
+const footerInfo = document.getElementById("footer-info");
+const modalOverlay = document.getElementById("modal-overlay");
+const modalTitle = document.getElementById("modal-title");
+const itemForm = document.getElementById("item-form");
 
-	const $status = () => document.getElementById('status');
-	const $tableBody = () => document.querySelector('#inventoryTable tbody');
-	const $search = () => document.getElementById('search');
-	const $pageSize = () => document.getElementById('pageSize');
-	const $pagination = () => document.getElementById('pagination');
+let allItems = [];
+let sortCol = null;
+let sortDir = "asc";
+let editingId = null; // null = creating, number = editing
 
-	function setStatus(text, isError){
-		const el = $status();
-		el.textContent = text || '';
-		el.className = isError ? 'status error' : 'status';
-	}
+// --- Fetch & render ---
 
-	async function fetchInventory(){
-		setStatus('Loading inventory...');
-		try{
-			const res = await fetch('/inventory');
-			if(!res.ok) throw new Error(res.statusText || 'Failed');
-			const data = await res.json();
-			items = Array.isArray(data) ? data : [];
-			page = 1;
-			applyFilters();
-			setStatus('Loaded ' + items.length + ' items');
-		}catch(err){
-			setStatus('Error loading inventory: ' + err.message, true);
-			items = [];
-			applyFilters();
-		}
-	}
+async function fetchInventory() {
+  try {
+    const res = await fetch("/inventory");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    allItems = await res.json();
+    statusEl.textContent = "connected";
+    statusEl.className = "connection-status connected";
+    renderTable(allItems);
+    footerInfo.textContent = `${allItems.length} rows returned from inventory`;
+  } catch (err) {
+    statusEl.textContent = "error";
+    statusEl.className = "connection-status error";
+    footerInfo.textContent = `Error: ${err.message}`;
+    tbody.innerHTML = `<tr><td colspan="9" class="no-results">Failed to load inventory: ${err.message}</td></tr>`;
+  }
+}
 
-	function applyFilters(){
-		const q = ($search().value || '').toLowerCase().trim();
-		if(q){
-			filtered = items.filter(it => {
-				return (''+it.name).toLowerCase().includes(q)
-					|| (''+it.sku).toLowerCase().includes(q)
-					|| (''+it.location).toLowerCase().includes(q)
-					|| (''+it.id).toLowerCase().includes(q);
-			});
-		} else filtered = items.slice();
+function getFiltered() {
+  const q = searchInput.value.toLowerCase().trim();
+  if (!q) return [...allItems];
+  return allItems.filter(item =>
+    Object.values(item).some(v =>
+      String(v).toLowerCase().includes(q)
+    )
+  );
+}
 
-		if(sortKey){
-			filtered.sort((a,b) => {
-				const av = a[sortKey] ?? '';
-				const bv = b[sortKey] ?? '';
-				if(typeof av === 'number' && typeof bv === 'number') return (av-bv)*sortDir;
-				return String(av).localeCompare(String(bv)) * sortDir;
-			});
-		}
-		renderTable();
-		renderPagination();
-	}
+function getSorted(items) {
+  if (!sortCol) return items;
+  return items.sort((a, b) => {
+    let va = a[sortCol];
+    let vb = b[sortCol];
+    if (va == null) va = "";
+    if (vb == null) vb = "";
+    if (typeof va === "number" && typeof vb === "number") {
+      return sortDir === "asc" ? va - vb : vb - va;
+    }
+    va = String(va).toLowerCase();
+    vb = String(vb).toLowerCase();
+    if (va < vb) return sortDir === "asc" ? -1 : 1;
+    if (va > vb) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+}
 
-	function renderTable(){
-		const tbody = $tableBody();
-		tbody.innerHTML = '';
-		pageSize = parseInt($pageSize().value,10) || 10;
-		const start = (page-1)*pageSize;
-		const pageItems = filtered.slice(start, start+pageSize);
+function renderTable(items) {
+  const filtered = getSorted(getFiltered());
+  rowCountEl.textContent = `${filtered.length} rows`;
 
-		for(const it of pageItems){
-			const tr = document.createElement('tr');
-			tr.innerHTML = `
-				<td>${escapeHtml(it.id)}</td>
-				<td>${escapeHtml(it.name)}</td>
-				<td>${escapeHtml(it.sku)}</td>
-				<td>${escapeHtml(it.quantity)}</td>
-				<td>${escapeHtml(it.location)}</td>
-				<td>${escapeHtml(it.last_updated || '')}</td>
-				<td>
-					<button data-id="${escapeHtml(it.id)}" class="btn small view">View</button>
-					<button data-id="${escapeHtml(it.id)}" class="btn small edit">Edit</button>
-					<button data-id="${escapeHtml(it.id)}" class="btn small danger">Delete</button>
-				</td>
-			`;
-			tbody.appendChild(tr);
-		}
-		// attach simple action handler only to view buttons (other buttons are UI-only for now)
-		tbody.querySelectorAll('button.view').forEach(btn => {
-			btn.addEventListener('click', () => {
-				const id = btn.getAttribute('data-id');
-				alert('Open item: ' + id);
-			});
-		});
-	}
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="no-results">No matching rows</td></tr>`;
+    return;
+  }
 
-	function renderPagination(){
-		const container = $pagination();
-		container.innerHTML = '';
-		const total = filtered.length;
-		const pages = Math.max(1, Math.ceil(total / pageSize));
+  tbody.innerHTML = filtered.map(item => {
+    const zeroClass = item.quantity === 0 ? ' class="zero-qty"' : "";
+    const sizeVal = item.size ?? "\u2014";
+    const colorVal = item.color ?? "\u2014";
+    return `<tr${zeroClass}>
+      <td class="id-cell">${item.id}</td>
+      <td>${esc(item.name)}</td>
+      <td>${esc(item.category)}</td>
+      <td>${esc(item.brand)}</td>
+      <td class="${item.size == null ? 'dim' : ''}">${esc(sizeVal)}</td>
+      <td class="${item.color == null ? 'dim' : ''}">${esc(colorVal)}</td>
+      <td class="num">${item.quantity}</td>
+      <td class="num price">${item.price.toFixed(2)}</td>
+      <td class="actions-cell">
+        <button class="btn-icon btn-edit" title="Edit" onclick="openEdit(${item.id})">&#9998;</button>
+        <button class="btn-icon btn-delete" title="Delete" onclick="deleteItem(${item.id})">&#128465;</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
 
-		const info = document.createElement('span');
-		info.className = 'page-info';
-		info.textContent = `Showing ${Math.min((page-1)*pageSize+1, total)}–${Math.min(page*pageSize, total)} of ${total}`;
-		container.appendChild(info);
+function esc(str) {
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
 
-		const btnPrev = document.createElement('button');
-		btnPrev.textContent = 'Prev';
-		btnPrev.disabled = page <= 1;
-		btnPrev.addEventListener('click', ()=> { page = Math.max(1, page-1); renderTable(); renderPagination(); });
-		container.appendChild(btnPrev);
+// --- Modal ---
 
-		const btnNext = document.createElement('button');
-		btnNext.textContent = 'Next';
-		btnNext.disabled = page >= pages;
-		btnNext.addEventListener('click', ()=> { page = Math.min(pages, page+1); renderTable(); renderPagination(); });
-		container.appendChild(btnNext);
-	}
+function openModal() {
+  modalOverlay.classList.add("active");
+}
 
-	function escapeHtml(v){
-		if(v === null || v === undefined) return '';
-		return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c]);
-	}
+function closeModal() {
+  modalOverlay.classList.remove("active");
+  itemForm.reset();
+  editingId = null;
+}
 
-	function addHeaderSorting(){
-		document.querySelectorAll('#inventoryTable thead th[data-key]').forEach(th => {
-			th.style.cursor = 'pointer';
-			th.addEventListener('click', ()=>{
-				const key = th.getAttribute('data-key');
-				if(sortKey === key) sortDir = -sortDir; else { sortKey = key; sortDir = 1; }
-				applyFilters();
-			});
-		});
-	}
+document.getElementById("btn-add").addEventListener("click", () => {
+  editingId = null;
+  modalTitle.textContent = "Add Item";
+  document.getElementById("btn-save").textContent = "Create";
+  itemForm.reset();
+  openModal();
+});
 
-	function init(){
-		document.getElementById('refresh').addEventListener('click', fetchInventory);
-		$search().addEventListener('input', ()=>{ page = 1; applyFilters(); });
-		$pageSize().addEventListener('change', ()=>{ page = 1; applyFilters(); });
-		addHeaderSorting();
-		fetchInventory();
-	}
+document.getElementById("modal-close").addEventListener("click", closeModal);
+document.getElementById("btn-cancel").addEventListener("click", closeModal);
+modalOverlay.addEventListener("click", (e) => {
+  if (e.target === modalOverlay) closeModal();
+});
 
-	document.addEventListener('DOMContentLoaded', init);
+function openEdit(id) {
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+  editingId = id;
+  modalTitle.textContent = "Edit Item";
+  document.getElementById("btn-save").textContent = "Update";
+  document.getElementById("f-name").value = item.name;
+  document.getElementById("f-category").value = item.category;
+  document.getElementById("f-brand").value = item.brand;
+  document.getElementById("f-size").value = item.size ?? "";
+  document.getElementById("f-color").value = item.color ?? "";
+  document.getElementById("f-quantity").value = item.quantity;
+  document.getElementById("f-price").value = item.price;
+  openModal();
+}
 
-})();
+// --- CRUD ---
 
+itemForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const payload = {
+    name: document.getElementById("f-name").value,
+    category: document.getElementById("f-category").value,
+    brand: document.getElementById("f-brand").value,
+    size: document.getElementById("f-size").value || null,
+    color: document.getElementById("f-color").value || null,
+    quantity: parseInt(document.getElementById("f-quantity").value, 10),
+    price: parseFloat(document.getElementById("f-price").value),
+  };
+
+  try {
+    let res;
+    if (editingId != null) {
+      res = await fetch(`/update/${editingId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      res = await fetch("/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    closeModal();
+    await fetchInventory();
+    footerInfo.textContent = editingId != null
+      ? `Updated item #${editingId}`
+      : "New item created";
+  } catch (err) {
+    footerInfo.textContent = `Error: ${err.message}`;
+  }
+});
+
+async function deleteItem(id) {
+  if (!confirm(`Delete item #${id}?`)) return;
+  try {
+    const res = await fetch(`/inventory/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await fetchInventory();
+    footerInfo.textContent = `Deleted item #${id}`;
+  } catch (err) {
+    footerInfo.textContent = `Error: ${err.message}`;
+  }
+}
+
+// --- Column sorting ---
+const columns = ["id", "name", "category", "brand", "size", "color", "quantity", "price"];
+document.querySelectorAll("th").forEach((th, i) => {
+  if (i >= columns.length) return; // skip actions column
+  th.addEventListener("click", () => {
+    const col = columns[i];
+    if (sortCol === col) {
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortCol = col;
+      sortDir = "asc";
+    }
+    document.querySelectorAll("th").forEach(h => h.classList.remove("sorted-asc", "sorted-desc"));
+    th.classList.add(sortDir === "asc" ? "sorted-asc" : "sorted-desc");
+    renderTable(allItems);
+  });
+});
+
+searchInput.addEventListener("input", () => renderTable(allItems));
+
+fetchInventory();

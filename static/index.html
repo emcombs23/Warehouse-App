@@ -14,6 +14,7 @@
     </div>
     <div class="header-right">
       <span class="connection-status" id="status">connecting...</span>
+      <button class="btn btn-register" id="btn-register">Register</button>
     </div>
   </header>
 
@@ -93,6 +94,31 @@
             <button type="button" class="btn btn-cancel" id="btn-cancel">Cancel</button>
             <button type="submit" class="btn btn-save" id="btn-save">Save</button>
           </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div class="modal-overlay" id="register-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <span id="register-title">Register</span>
+          <button class="modal-close" id="register-close">&times;</button>
+        </div>
+        <form id="register-form">
+          <div class="form-row">
+            <label for="r-username">Username</label>
+            <input type="text" id="r-username" required />
+          </div>
+          <div class="form-row">
+            <label for="r-password">Password</label>
+            <input type="password" id="r-password" required />
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn-cancel" id="r-cancel">Cancel</button>
+            <button type="submit" class="btn btn-save" id="r-submit">Register</button>
+          </div>
+          <div id="r-message" class="form-message"></div>
         </form>
       </div>
     </div>

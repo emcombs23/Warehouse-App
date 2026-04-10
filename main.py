@@ -70,4 +70,13 @@ async def register(user: UserCreate):
         session.refresh(user_record)
         return {"id": user_record.id, "username": user_record.username, 'password_hash': user_record.password_hash}
 
+
+@app.post("/login")
+async def login(user: UserCreate):
+    with Session(engine) as session:
+        user_record = session.exec(select(User).where(User.username == user.username)).first()
+        if not user_record or not bcrypt.checkpw(user.password.encode(), user_record.password_hash.encode()):
+            raise HTTPException(status_code=400, detail="Invalid username or password")
+        return {"message": "Login successful", "username": user_record.username}
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

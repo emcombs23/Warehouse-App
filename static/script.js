@@ -6,6 +6,14 @@ const footerInfo = document.getElementById("footer-info");
 const modalOverlay = document.getElementById("modal-overlay");
 const modalTitle = document.getElementById("modal-title");
 const itemForm = document.getElementById("item-form");
+const btnRegister = document.getElementById("btn-register");
+const registerOverlay = document.getElementById("register-overlay");
+const registerForm = document.getElementById("register-form");
+const registerClose = document.getElementById("register-close");
+const regUsername = document.getElementById("r-username");
+const regPassword = document.getElementById("r-password");
+const regCancel = document.getElementById("r-cancel");
+const regMessage = document.getElementById("r-message");
 
 let allItems = [];
 let sortCol = null;
@@ -107,6 +115,18 @@ function closeModal() {
   editingId = null;
 }
 
+function openRegister() {
+  registerOverlay.classList.add("active");
+  regMessage.textContent = "";
+  registerForm.reset();
+}
+
+function closeRegister() {
+  registerOverlay.classList.remove("active");
+  registerForm.reset();
+  regMessage.textContent = "";
+}
+
 document.getElementById("btn-add").addEventListener("click", () => {
   editingId = null;
   modalTitle.textContent = "Add Item";
@@ -119,6 +139,16 @@ document.getElementById("modal-close").addEventListener("click", closeModal);
 document.getElementById("btn-cancel").addEventListener("click", closeModal);
 modalOverlay.addEventListener("click", (e) => {
   if (e.target === modalOverlay) closeModal();
+});
+
+// Register modal handlers
+btnRegister.addEventListener("click", () => {
+  openRegister();
+});
+registerClose.addEventListener("click", closeRegister);
+regCancel.addEventListener("click", closeRegister);
+registerOverlay.addEventListener("click", (e) => {
+  if (e.target === registerOverlay) closeRegister();
 });
 
 function openEdit(id) {
@@ -188,6 +218,37 @@ async function deleteItem(id) {
     footerInfo.textContent = `Error: ${err.message}`;
   }
 }
+
+// Handle registration submit
+registerForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const payload = {
+    username: regUsername.value.trim(),
+    password: regPassword.value,
+  };
+  if (!payload.username || !payload.password) {
+    regMessage.textContent = "Username and password are required.";
+    return;
+  }
+
+  try {
+    const res = await fetch('/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      regMessage.textContent = err.detail || `Registration failed (HTTP ${res.status})`;
+      return;
+    }
+    const data = await res.json();
+    closeRegister();
+    footerInfo.textContent = `Registered user ${data.username} (id ${data.id})`;
+  } catch (err) {
+    regMessage.textContent = `Error: ${err.message}`;
+  }
+});
 
 // --- Column sorting ---
 const columns = ["id", "name", "category", "brand", "size", "color", "quantity", "price"];
